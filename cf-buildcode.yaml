@@ -1,0 +1,115 @@
+Resources:
+  CodePipelinePipeline:
+    Properties:
+      ArtifactStore:
+        Location: ecoation-s-common-code-pipeline-dev
+        Type: S3
+      Name: ecs-sample-api
+      RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/code-pipeline'
+      Stages:
+        - Actions:
+            - ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Branch: dev
+                OAuthToken: '{{resolve:ssm:github-oauth-token:1}}'
+                Owner: nikswain
+                Repo: s-api
+              Name: Source
+              OutputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+          Name: Source
+        - Actions:
+            - ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref 'CodeBuildCodeBuild'
+              InputArtifacts:
+                - Name: SourceOutput
+              Name: Build
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+          Name: Build
+        - Actions:
+            - ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: ECS
+                Version: '1'
+              Configuration:
+                ClusterName: ecs-sample-api
+                FileName: imagedefinitions.json
+                ServiceName: s-api
+              InputArtifacts:
+                - Name: BuildOutput
+              Name: Deploy
+              RunOrder: 1
+          Name: Deploy
+    Type: AWS::CodePipeline::Pipeline
+  # CodeBuildCodeBuild:
+  #   DependsOn:
+  #     - ECRECR
+  #     - Service
+  #   Properties:
+  #     Artifacts:
+  #       Type: CODEPIPELINE
+  #     Environment:
+  #       ComputeType: BUILD_GENERAL1_SMALL
+  #       EnvironmentVariables:
+  #         - Name: AWS_DEFAULT_REGION
+  #           Value: !Ref 'AWS::Region'
+  #         - Name: REPOSITORY_URI
+  #           Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ecs-sample-api'
+  #         - Name: SERVICE_NAME
+  #           Value: ecs-sample-api
+  #         - Name: FILE_NAME
+  #           Value: imagedefinitions.json
+  #       Image: aws/codebuild/docker:17.09.0
+  #       Type: LINUX_CONTAINER
+  #     Name: ecs-sample-api
+  #     ServiceRole: !Sub 'arn:aws:iam::${AWS::AccountId}:role/code-build'
+  #     Source:
+  #       BuildSpec: |
+  #         version: 0.2
+
+  #         phases:
+  #           pre_build:
+  #             commands:
+  #               - $(aws ecr get-login --no-include-email)
+  #               - TAG="latest"
+  #               - IMAGE_URI="${REPOSITORY_URI}:${TAG}"
+  #               - SERVICE_NAME="${SERVICE_NAME}"
+  #               - FILE_NAME="${FILE_NAME}"
+  #           build:
+  #             commands:
+  #                 - docker build --tag "$IMAGE_URI" .
+  #           post_build:
+  #             commands:
+  #                 - docker push "$IMAGE_URI"
+  #                 - printf '[{"name":"%s","imageUri":"%s"}]' "$SERVICE_NAME" "$IMAGE_URI" > "${FILE_NAME}"
+  #         artifacts:
+  #           files:
+  #             - "${FILE_NAME}"
+  #       Type: CODEPIPELINE
+  #   Type: AWS::CodeBuild::Project
+  
+  # ECRECR:
+  #   Properties:
+  #     LifecyclePolicy:
+  #       LifecyclePolicyText: "\n        {\n          \"rules\": [\n            {\n\
+  #         \              \"rulePriority\": 1,\n              \"description\": \"Keep\
+  #         \ only 5 images\",\n              \"selection\": {\n                \"tagStatus\"\
+  #         : \"any\",\n                \"countType\": \"imageCountMoreThan\",\n   \
+  #         \             \"countNumber\": 5\n              },\n              \"action\"\
+  #         : {\n                \"type\": \"expire\"\n              }\n           \
+  #         \ }\n          ]\n        }\n      "
+  #     RepositoryName: ecs-sample-api
+  #   Type: AWS::ECR::Repository

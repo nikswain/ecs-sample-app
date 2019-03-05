@@ -1,0 +1,52 @@
+Resources:
+  Cluster:
+    Properties:
+      ClusterName: sample-api-cluster
+    Type: AWS::ECS::Cluster
+  Service:
+    Properties:
+      Cluster: !Ref 'Cluster'
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - subnet-0c315175
+            - subnet-8e1d64d4
+            - subnet-e94ac8a2
+      ServiceName: sample-api-service
+      TaskDefinition: !Ref 'TaskDefinitionTaskDefinition'
+    Type: AWS::ECS::Service
+  TaskDefinitionTaskDefinition:
+    DependsOn:
+      - TaskRole
+    Properties:
+      ContainerDefinitions:
+        - Essential: 'true'
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/ecs-sample-app:latest'
+          Name: ecs-sample
+          PortMappings:
+            - ContainerPort: 3000
+      Cpu: '256'
+      ExecutionRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/task-execution-role'
+      Family: ecs-sample
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !GetAtt 'TaskRole.Arn'
+    Type: AWS::ECS::TaskDefinition
+  TaskRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Path: /
+      RoleName: ecs-sample-task-role
+    Type: AWS::IAM::Role
